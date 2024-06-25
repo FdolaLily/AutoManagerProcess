@@ -23,7 +23,7 @@ namespace AutoManagerProcess
 
         [DllImport("wtsapi32.dll", SetLastError = true)]
         public static extern bool WTSQueryUserToken(uint SessionId, out IntPtr phToken);
-     
+
 
         [DllImport("advapi32.dll", SetLastError = true)]
         public static extern bool DuplicateTokenEx(
@@ -178,7 +178,24 @@ namespace AutoManagerProcess
         }
 
 
-        public static void SetIoPriority(int processId , ILogger logger)
+        public enum IoPriorityHint
+        {
+            IoPriorityVeryLow = 0, 
+            IoPriorityLow = 1,   
+            IoPriorityNormal = 2, 
+            IoPriorityHigh = 3
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct IO_PRIORITY_HINT
+        {
+            public IoPriorityHint Priority;
+        }
+
+        [DllImport("ntdll.dll", SetLastError = true)]
+        private static extern int NtSetInformationProcess(IntPtr ProcessHandle, int ProcessInformationClass, ref IO_PRIORITY_HINT ProcessInformation, int ProcessInformationLength);
+
+        public static void SetIoPriority(int processId, ILogger logger)
         {
             IntPtr hProcess = OpenProcess(ProcessAccessFlags.SetInformation, false, processId);
             if (hProcess == IntPtr.Zero)
@@ -189,8 +206,9 @@ namespace AutoManagerProcess
 
             try
             {
-                bool result = SetPriorityClass(hProcess, (uint)IoPriority.VeryLow);
-                if (!result)
+                IO_PRIORITY_HINT ioPriorityHint = new IO_PRIORITY_HINT { Priority = IoPriorityHint.IoPriorityVeryLow };
+                int result = NtSetInformationProcess(hProcess, 0x21, ref ioPriorityHint, Marshal.SizeOf(ioPriorityHint));
+                if (result != 0)
                 {
                     logger.LogError("无法设置I/O优先级");
                 }
@@ -215,7 +233,7 @@ namespace AutoManagerProcess
             {
                 Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION,
                 ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
-                StateMask =  PROCESS_POWER_THROTTLING_EXECUTION_SPEED 
+                StateMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED
             };
 
             try
@@ -223,7 +241,7 @@ namespace AutoManagerProcess
                 bool result = SetProcessInformation(hProcess, PROCESS_INFORMATION_CLASS.ProcessPowerThrottling, ref state, (uint)Marshal.SizeOf(state));
                 if (!result)
                 {
-                    Console.WriteLine("无法设置效率模式");
+                    logger.LogError("无法设置效率模式");
                 }
                 logger.LogInformation("设置效率模式成功");
             }
@@ -240,9 +258,6 @@ namespace AutoManagerProcess
         static extern bool CloseHandle(IntPtr hObject);
 
         [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool SetPriorityClass(IntPtr hProcess, uint dwPriorityClass);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool SetProcessInformation(IntPtr hProcess, PROCESS_INFORMATION_CLASS processInformationClass, ref PROCESS_POWER_THROTTLING_STATE processInformation, uint processInformationSize);
 
         [StructLayout(LayoutKind.Sequential)]
@@ -255,17 +270,12 @@ namespace AutoManagerProcess
 
         enum PROCESS_INFORMATION_CLASS
         {
-            ProcessMemoryPriority,
-            ProcessPowerThrottling
+            ProcessPowerThrottling = 24
         }
 
         const uint PROCESS_POWER_THROTTLING_CURRENT_VERSION = 1;
         const uint PROCESS_POWER_THROTTLING_EXECUTION_SPEED = 0x1;
 
-        enum IoPriority
-        {
-            VeryLow = 0x00000001 // 低优先级
-        }
 
         [Flags]
         enum ProcessAccessFlags : uint

@@ -108,8 +108,10 @@ public class Worker() : BackgroundService
                 //设置I/0优先级为最低
                 if (IsGreaterWindows8()) PInvoke.SetIoPriority(process.Id, _logger);
 
-                //设置为效率模式
-                if (IsGreaterWindows11()) PInvoke.SetEfficiencyMode(process.Id, _logger);
+
+                //bool efficiencyMode = _config.GetSection("EfficiencyMode").Get<bool>();
+                //设置为效率模式 有可能导致不稳定
+                //if (IsGreaterWindows11() && efficiencyMode) PInvoke.SetEfficiencyMode(process.Id, _logger);
 
             }
         }
