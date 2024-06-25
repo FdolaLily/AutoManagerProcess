@@ -5,11 +5,14 @@ namespace AutoManagerProcess;
 
 public class Worker() : BackgroundService
 {
+    //WIN11开启效率模式
+
     private readonly ILogger<Worker> _logger;
 
     private readonly IConfiguration _config;
 
     private ManagementEventWatcher? _watcher;
+
 
     public Worker(ILogger<Worker> logger) : this()
     {
@@ -59,6 +62,8 @@ public class Worker() : BackgroundService
 
                         KillProcess();
 
+                        LimitSGuard();
+
                     };
 
                     _watcher.Start();
@@ -84,6 +89,48 @@ public class Worker() : BackgroundService
         }
     }
 
+    private void LimitSGuard()
+    {
+        var limitList = _config.GetSection("LimitList").Get<List<string>>()
+            ?? ["SGuard64.exe", "SGuardSvc64.exe"];
+        foreach (var processName in limitList)
+        {
+            var ps = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(processName));
+
+            foreach (var process in ps)
+            {
+                //设置进程优先级为最低 有可能造成死锁导致不稳定
+                //process.PriorityClass = ProcessPriorityClass.Idle;
+
+                //设置亲和性为最后一个CPU
+                SetLastCpuAffinity(process);
+
+                //设置I/0优先级为最低
+                if (IsGreaterWindows8()) PInvoke.SetIoPriority(process.Id, _logger);
+
+                //设置为效率模式
+                if (IsGreaterWindows11()) PInvoke.SetEfficiencyMode(process.Id, _logger);
+
+            }
+        }
+    }
+
+    private void SetLastCpuAffinity(Process process)
+    {
+        //获取当前进程的CPU亲和性掩码
+        var affinityMask = process.ProcessorAffinity;
+        //获取允许运行的CPU列表
+        var cpuCount = Environment.ProcessorCount;
+        var allowedCpus = Enumerable.Range(0, cpuCount)
+            .Where(cpu => (affinityMask.ToInt64() & (1L << cpu)) != 0)
+            .ToList();
+
+        if (allowedCpus.Count <= 0) return;
+
+        var newAffinityMask = (IntPtr)(1L << allowedCpus.Last());
+        process.ProcessorAffinity = newAffinityMask;
+    }
+
     private void AutoStart()
     {
         var processList = _config.GetSection("AutoStart").Get<List<string>>();
@@ -98,7 +145,7 @@ public class Worker() : BackgroundService
         {
             if (!File.Exists(processName))
             {
-                _logger.LogWarning("cannot find this file {process}",processName);
+                _logger.LogWarning("cannot find this file {process}", processName);
                 continue;
             }
             var tmp = Path.GetFileNameWithoutExtension(processName);
@@ -110,17 +157,11 @@ public class Worker() : BackgroundService
                 _logger.LogInformation("process is ready exist");
                 continue;
             }
-                
+
             //启动该程序
             try
             {
-                using (Process process = new Process())
-                {
-                    process.StartInfo.FileName = processName;
-                    process.StartInfo.UseShellExecute = true;
-                    process.StartInfo.CreateNoWindow = false;
-                    process.Start();
-                }
+                PInvoke.StartInteractiveProcess(processName, _logger);
 
                 _logger.LogInformation("Process {ProcessName} has been ran", processName);
             }
@@ -141,9 +182,30 @@ public class Worker() : BackgroundService
             // ace-loader有两个
             foreach (var process in ps)
             {
+
                 process.Kill();
                 _logger.LogInformation("Process {ProcessName} has been killed", process.ProcessName);
             }
         }
     }
+
+    private bool IsGreaterWindows11()
+    {
+        return IsWindowsVersionOrGreater(10, 0, 22000);
+    }
+
+    private bool IsGreaterWindows8()
+    {
+        return IsWindowsVersionOrGreater(6, 2, 0);
+    }
+
+
+    private bool IsWindowsVersionOrGreater(int major, int minor, int build)
+    {
+        var osVersion = Environment.OSVersion.Version;
+        return (osVersion.Major > major) ||
+               (osVersion.Major == major && osVersion.Minor > minor) ||
+               (osVersion.Major == major && osVersion.Minor == minor && osVersion.Build >= build);
+    }
 }
+
