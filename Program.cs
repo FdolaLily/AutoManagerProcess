@@ -11,7 +11,8 @@ if (!builder.Environment.IsDevelopment())
         c.WriteTo
             .File(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "log.txt")
                 , fileSizeLimitBytes: 10480
-                , rollOnFileSizeLimit: true)
+                , rollOnFileSizeLimit: true
+                , retainedFileCountLimit: 20)
             .ReadFrom.Configuration(builder.Configuration);
     });
 }
