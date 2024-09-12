@@ -210,9 +210,9 @@ namespace AutoManagerProcess
                 int result = NtSetInformationProcess(hProcess, 0x21, ref ioPriorityHint, Marshal.SizeOf(ioPriorityHint));
                 if (result != 0)
                 {
-                    logger.LogError("无法设置I/O优先级");
+                    logger.LogError($"{processId}:无法设置I/O优先级");
                 }
-                logger.LogInformation("设置I/0优先级成功");
+                logger.LogInformation($"{processId}:设置I/0优先级成功");
             }
             finally
             {

@@ -4,18 +4,17 @@ using Serilog;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-if (!builder.Environment.IsDevelopment())
+
+builder.Services.AddSerilog(c =>
 {
-    builder.Services.AddSerilog(c =>
-    {
-        c.WriteTo
-            .File(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "log.txt")
-                , fileSizeLimitBytes: 10480
-                , rollOnFileSizeLimit: true
-                , retainedFileCountLimit: 20)
-            .ReadFrom.Configuration(builder.Configuration);
-    });
-}
+    c.WriteTo
+        .File(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "log.txt")
+            , fileSizeLimitBytes: 10480
+            , rollOnFileSizeLimit: false
+            , retainedFileCountLimit: null)
+        .ReadFrom.Configuration(builder.Configuration);
+});
+
 
 
 builder.Services.AddWindowsService(o =>

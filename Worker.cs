@@ -49,6 +49,7 @@ public class Worker() : BackgroundService
                     var query = new WqlEventQuery(queryStr);
                     var scope = new ManagementScope("\\\\.\\root\\cimv2");
                     _watcher = new ManagementEventWatcher(scope, query);
+                    var token = stoppingToken;
                     _watcher.EventArrived += async (sender, e) =>
                     {
                         AutoStart();
@@ -58,7 +59,7 @@ public class Worker() : BackgroundService
                             delay = 60;
 
                         //延时执行
-                        await Task.Delay(TimeSpan.FromSeconds(delay), stoppingToken);
+                        await Task.Delay(TimeSpan.FromSeconds(delay), token);
 
                         KillProcess();
 
@@ -176,19 +177,27 @@ public class Worker() : BackgroundService
 
     private void KillProcess()
     {
-        var processList = _config.GetSection("ProcessList").Get<List<string>>() ??
+        var processList = _config.GetSection("KillList").Get<List<string>>() ??
                           ["GameLoader.exe", "TXPlatform.exe", "ace-loader.exe"];
-        foreach (var processName in processList)
+        try
         {
-            var ps = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(processName));
-            // ace-loader有两个
-            foreach (var process in ps)
+            foreach (var processName in processList)
             {
-
-                process.Kill();
-                _logger.LogInformation("Process {ProcessName} has been killed", process.ProcessName);
+                var ps = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(processName));
+                // 同名进程可能有多个
+                foreach (var process in ps)
+                {
+                    _logger.LogInformation($"Current ProcessName {processName}");
+                    process.Kill();
+                    _logger.LogInformation($"Process {process.ProcessName} has been killed");
+                }
             }
         }
+        catch (Exception e)
+        {
+            _logger.LogError($"KillProcess Error :{e.Message}");
+        }
+        
     }
 
     private bool IsGreaterWindows11()
